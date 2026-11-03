@@ -9,8 +9,14 @@ Payload residente para centralizar el protocolo de elevación de aplicaciones qu
 - Solo concede la elevación a Title IDs presentes en `/data/permission-broker/allowlist.txt` o en el `/data/whitelist.txt` heredado de OnionHEN/PS5SX2.
 - Usa `libhijacker` (`Hijacker::jailbreak(true)`) para la elevación compatible.
 - Comprueba el `authid` resultante (`0x4801000000000013`). Si ya está aplicado, responde internamente `ALREADY_GRANTED`, no vuelve a escribir credenciales y elimina el marcador como acuse compatible con los PRX antiguos.
-- Utiliza `flock()` para impedir que arranquen dos instancias del propio Broker.
-- Reintenta hasta 10 segundos si el proceso aún no está listo; registra el resultado en `/data/permission-broker/<slot>.status` y en `broker.log`.
+- Utiliza `fcntl(F_SETLK)` para impedir que arranquen dos instancias del propio Broker (equivalente a `flock`, que no exportan los stubs del SDK).
+- **Se identifica solo al arrancar**: el loader de kstuff/etaHEN arranca los payloads con el nombre genérico `payload.elf`; el Broker reescribe el nombre de proceso gestionado por el kernel a `perm-broker` (vía `KProc::setName` de libhijacker) y escribe su PID en `/data/permission-broker/broker.pid`, así aparece reconocible en las herramientas de procesos (PS5-Xplorer, depuración de etaHEN, etc.).
+- Verifica el TID del proceso con el `titleId()` nativo del kernel (fork de etaHEN), con respaldo al análisis de la ruta del SELF si el label viene vacío.
+- **Gana la carrera de marcadores por diseño**: reclama cada marcador con un `rename()` atómico a un nombre privado `.pb_claim_*` en el mismo directorio; los consumidores competidores (Lapy, etaHEN) solo vigilan los nombres canónicos y quedan ciegos desde el instante del claim.
+- **Despertar reactivo**: vigila cada `download0` con `kqueue(EVFILT_VNODE)`; si el kernel no entrega eventos, degrada automáticamente a sondeo puro de 2 ms (nunca es peor que sondear).
+- **Auditoría de derrotas**: cada ~5 s recorre `allproc` y registra en `broker.log` cualquier proceso elevado con `authid` de app-jailbreak cuyo TID no esté en la allowlist (huella de un consumidor competidor que ganó alguna carrera).
+- Reintenta hasta 10 segundos si el proceso aún no está listo (el claim retenido es invisible para competidores durante los reintentos); registra el resultado en `/data/permission-broker/<slot>.status` y en `broker.log`. Los claims huérfanos de un crash se recuperan en el siguiente arranque.
+- **Huella acotada / auto-limpieza**: el bucle de 2 ms no asigna memoria (solo syscalls); los objetos transitorios de libhijacker (`KProc` ~3,2 KB, `KUcred`, `Hijacker`) se liberan al salir de scope vía `UniquePtr`; el `ProcessMemoryAllocator` no reserva memoria nueva en el proceso elevado (talla huecos de secciones ya existentes). Los watches kqueue están limitados a 32. En `/data`, todo se sobreescribe o se borra: claims procesados/STALE, `<slot>.status`, `broker.pid`; y `broker.log` rota a `broker.log.1` al superar 256 KB. Al morir el proceso, el kernel libera toda la RAM/fds/locks automáticamente (el lock de instancia se libera solo al salir).
 
 ## Límite importante
 
