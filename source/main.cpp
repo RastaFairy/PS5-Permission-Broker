@@ -46,7 +46,7 @@ extern "C" {
 extern "C" uint64_t kernel_base = 0;
 
 namespace {
-constexpr const char *kVersion = "0.4.0-fw550";
+constexpr const char *kVersion = "0.4.1-fw550";
 constexpr const char *kSandboxRoot = "/mnt/sandbox";
 constexpr const char *kStateDir = "/data/permission-broker";
 constexpr const char *kAllowlist = "/data/permission-broker/allowlist.txt";
@@ -343,7 +343,14 @@ bool proc_tid(const KProc &proc, char *tid, size_t cap) {
 // Make the resident process identifiable in process-list tools: the ELF
 // loader (kstuff/etaHEN) spawns payloads under the generic name
 // "payload.elf"; rewrite the kernel-managed process name right after boot.
+// Launchers like MihawkOS allowlist payloads by name and block named extras,
+// so the rename can be disabled with a no-rename marker file (the broker is
+// then listed as an unnamed "payload", which those launchers do not block).
 void identify_self() {
+    if (config_flag("/data/permission-broker/no-rename")) {
+        log_line("self-rename disabled by no-rename flag");
+        return;
+    }
     if (auto self = getProc()) {
         self->setName(kProcessName);
         log_line("process identity set: %s (pid=%d)", kProcessName, self->pid());
