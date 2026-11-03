@@ -1,4 +1,4 @@
-# PS5 Permission Broker — FW 5.50 baseline
+# PS5 Permission Broker
 
 Payload residente para centralizar el protocolo de elevación de aplicaciones que ya utilizan los PRX compatibles con etaHEN/OnionHEN.
 
