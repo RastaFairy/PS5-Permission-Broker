@@ -1,4 +1,4 @@
-# PS5 Permission Broker — FW 5.50 baseline
+# PS5 Permission Broker
 
 Payload residente para centralizar el protocolo de elevación de aplicaciones que ya utilizan los PRX compatibles con etaHEN/OnionHEN.
 
@@ -50,16 +50,6 @@ make -j"$(nproc)"
 El script obtiene `libhijacker` desde el repositorio de Lapy JB Daemon v1.2. `offsets_v940.cpp` usa los símbolos de kernel resueltos en runtime por el SDK; no son offsets fijos de FW 9.40.
 
 Salida esperada: `permission_broker.elf`.
-
-## Compatibilidad con lanzadores (MihawkOS)
-
-MihawkOS hace un «payload check» antes de arrancar y solo admite su conjunto oficial de payloads: cualquier payload residente identificado por nombre (como `perm-broker`) bloquea el arranque. Opciones:
-
-- **Mantener △ 5 segundos** en el check: continúa con el broker residente (3 MiB; el broker seguirá siendo la autoridad de los marcadores y dejará sin trabajo al demonio Lapy interno de MihawkOS).
-- **Crear `/data/permission-broker/no-rename`** (v0.4.1+): el broker no se renombra, aparece como un «payload» sin nombre y el check de MihawkOS no lo bloquea.
-- **Arrancar sin broker** para sesiones de MihawkOS: su propio demonio Lapy consume los marcadores (sin allowlist). Quitar `permission_broker.elf` del autoload y reiniciar.
-
-Nota: v0.4.0+ dejó kqueue y la auditoría desactivados por defecto tras un crash de ShellCore en FW 5.50 (causa raíz: ráfagas de eventos VNODE aceleraban el bucle y adelantaban la auditoría a offsets de kernel no verificados); con el build actual la consola es estable en hardware.
 
 ## Compilación real (WSL2, 03-11-2026)
 
