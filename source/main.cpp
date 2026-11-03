@@ -46,7 +46,7 @@ extern "C" {
 extern "C" uint64_t kernel_base = 0;
 
 namespace {
-constexpr const char *kVersion = "0.3.0-fw550";
+constexpr const char *kVersion = "0.4.0-fw550";
 constexpr const char *kSandboxRoot = "/mnt/sandbox";
 constexpr const char *kStateDir = "/data/permission-broker";
 constexpr const char *kAllowlist = "/data/permission-broker/allowlist.txt";
@@ -55,6 +55,8 @@ constexpr const char *kLogFile = "/data/permission-broker/broker.log";
 constexpr const char *kPidFile = "/data/permission-broker/broker.pid";
 constexpr const char *kProcessName = "perm-broker";
 constexpr size_t kMaxLogBytes = 256 * 1024; // rotate broker.log past this size
+constexpr const char *kFlagKqueue = "/data/permission-broker/use-kqueue";
+constexpr const char *kFlagAudit = "/data/permission-broker/use-audit";
 constexpr uint64_t kAppJailbreakAuthId = 0x4801000000000013ull;
 constexpr unsigned kPollIntervalUs = 2000;        // fallback sweep every 2 ms
 constexpr unsigned kMaxDeferredAttempts = 5000;   // 10 s at 2 ms
@@ -121,6 +123,13 @@ bool ensure_state_dir() {
     }
     (void)chmod(kStateDir, 0700);
     return true;
+}
+
+// Optional features are gated by the presence of a marker file; both touch
+// mechanisms that are unproven on some firmwares and stay OFF by default.
+bool config_flag(const char *path) {
+    struct stat st{};
+    return stat(path, &st) == 0;
 }
 
 bool acquire_single_instance() {
@@ -668,13 +677,22 @@ int main() {
     if (!acquire_single_instance()) return 0;
     write_pid_file();
 
-    g_kq = kqueue();
-    if (g_kq >= 0) {
-        log_line("exclusive authority acquired; watching %s (kqueue + %u us poll)",
-                 kSandboxRoot, kPollIntervalUs);
-    } else {
-        log_line("exclusive authority acquired; watching %s (poll, %u us)",
-                 kSandboxRoot, kPollIntervalUs);
+    // Optional mechanisms stay OFF unless explicitly enabled: kqueue attaches
+    // kernel knotes to vnodes owned by other processes (unproven on all FWs),
+    // and the audit reads kernel strings at fork-assumed offsets.
+    const bool useKqueue = config_flag(kFlagKqueue);
+    const bool useAudit = config_flag(kFlagAudit);
+
+    if (useKqueue) {
+        g_kq = kqueue();
+    }
+    log_line("exclusive authority acquired; watching %s (%s%u us poll%s)",
+             kSandboxRoot,
+             g_kq >= 0 ? "kqueue + " : "poll, ",
+             kPollIntervalUs,
+             useAudit ? ", audit on" : ", audit off");
+    if (useKqueue && g_kq < 0) {
+        log_line("kqueue() failed errno=%d; poll-only mode", errno);
     }
     log_line("protocol: etahen_jailbreak + onionhen_jailbreak; allowlist=%s", kAllowlist);
     log_line("claims are atomic (rename); duplicate grants return ALREADY_GRANTED");
@@ -683,24 +701,35 @@ int main() {
     pollTimeout.tv_nsec = static_cast<long>(kPollIntervalUs) * 1000L;
 
     for (;;) {
+        // Whether this iteration already slept (kevent timeout / usleep).
+        bool slept = false;
         if (g_kq >= 0) {
             struct kevent ev;
             const int n = kevent(g_kq, nullptr, 0, &ev, 1, &pollTimeout);
             if (n < 0) {
                 disable_kqueue("wait");
-            } else if (n > 0) {
+            } else if (n == 0) {
+                slept = true; // timed out: the wait was the throttle
+            } else {
                 watch_reap(ev);
             }
-            // event or timeout: sweep either way
         } else {
             usleep(kPollIntervalUs);
+            slept = true;
         }
 
         scan_sandboxes();
         watch_refresh();
 
+        // Hard throttle: while apps boot, VNODE events fire constantly and
+        // kevent returns instantly; without this the loop spins at full
+        // speed and the audit fires far earlier than intended.
+        if (!slept) {
+            usleep(kPollIntervalUs);
+        }
+
         ++g_loops;
-        if (g_loops % kAuditEveryLoops == 0) {
+        if (useAudit && g_loops % kAuditEveryLoops == 0) {
             policy_audit();
         }
     }
