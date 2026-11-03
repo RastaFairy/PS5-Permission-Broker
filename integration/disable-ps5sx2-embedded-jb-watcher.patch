@@ -1,0 +1,17 @@
+--- a/ps5/dischelper/helper-host/main.c
++++ b/ps5/dischelper/helper-host/main.c
+@@
+-    {
+-        pthread_t t;
+-        if (pthread_create(&t, NULL, payload_jb_thread, NULL) == 0) {
+-            (void)pthread_detach(t);
+-            payload_progress("jb thread started (built-ins 99203, 99303, "
+-                             "99231-99238 + whitelist.txt)");
+-        } else {
+-            payload_progress("jb thread FAILED");
+-        }
+-    }
++    /* Permission Broker is the sole consumer of etahen_jailbreak and
++     * onionhen_jailbreak markers. Do not start PS5SX2's embedded watcher:
++     * two consumers race to modify the same target ucred. */
++    payload_progress("embedded app-jailbreak watcher disabled; Permission Broker owns marker requests");

@@ -1,0 +1,3 @@
+This project links against libhijacker from ArkSama/PS5-Lapy-JB-Daemon and the PS5 Payload SDK.
+Please retain and comply with the upstream licenses when obtaining/building those dependencies.
+This generated project source is provided for personal research and development; it is not an official release of either upstream project.

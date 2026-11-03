@@ -1,0 +1,5 @@
+# Explicitly approved homebrew title IDs only. One ID per line.
+# Initial IDs correspond to PS5SX2/helper IDs visible in the supplied KLOG.
+PPSA99203
+PPSA99303
+# Add other homebrew IDs only after confirming they are trusted.

@@ -1,0 +1,4 @@
+# Insert this AFTER the existing Kstuff payload in your current autoload chain.
+# Do not load Lapy JB Daemon, etaHEN app-jailbreak watcher, or the unpatched
+# PS5SX2 helper's embedded OnionHEN marker watcher at the same time.
+/data/homebrew/permission-broker/permission_broker.elf
